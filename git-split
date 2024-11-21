@@ -1,0 +1,58 @@
+#!/bin/bash
+set -e
+
+# File to store the branch name (if on a branch)
+GIT_DIR=$(git rev-parse --absolute-git-dir)
+SHA_FILE="${GIT_DIR}/SPLIT_START"
+
+if [ "$1" == "start" ]; then
+    # Store the branch or detached HEAD state
+    current_sha=$(git rev-parse HEAD)
+    echo "$current_sha" > "$SHA_FILE"
+
+    if [ "$2" == "--hard" ]; then
+        git reset --hard HEAD~1
+    else
+        git reset HEAD~1
+    fi
+
+    echo "Git split started. Make your changes and commit them. Run 'git split end' when you're done."
+elif [ "$1" == "diff" ]; then
+    # Print missing changes to get to the final commit (this counts unstaged/uncommitted changes as well)
+    old_sha=$(cat "${SHA_FILE}")
+    git diff -R ${old_sha}
+elif [ "$1" == "end" ]; then
+    # Ensure the user has committed changes (C)
+    if ! git diff --quiet; then
+        echo "You have uncommitted changes. Please commit them before running 'git split end'."
+        exit 1
+    fi
+
+    old_sha=$(cat "${SHA_FILE}")
+
+    # Compute the diff patch (D) between the current HEAD and the commit before the last one
+    git apply <(git diff HEAD ${old_sha})
+    git add -u
+    git ci -c ${old_sha}
+
+    rm -f "${SHA_FILE}"
+
+    echo "Split complete. The commit history has been rewritten."
+
+elif [ "$1" == "abort" ]; then
+    # Restore old commit
+    old_sha=$(cat "${SHA_FILE}")
+    git reset --hard "${old_sha}"
+
+    # Optionally, clean up any leftover patch file if applicable
+    rm -f "${SHA_FILE}"
+
+    echo "Git split aborted. HEAD restored to the state before 'git split start'."
+else
+    if [ -f "${SHA_FILE}" ] && [ $# -eq 0 ]; then
+        echo "Currently in split with starting point: $(cat ${SHA_FILE})"
+    else
+        echo "Usage: git split {start|diff|end|abort}"
+        exit 1
+    fi
+fi
