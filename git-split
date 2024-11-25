@@ -40,19 +40,26 @@ elif [ "$1" == "end" ]; then
     echo "Split complete. The commit history has been rewritten."
 
 elif [ "$1" == "abort" ]; then
-    # Restore old commit
-    old_sha=$(cat "${SHA_FILE}")
-    git reset --hard "${old_sha}"
+    if [ "$2" != "--keep" ]; then
+        # Restore old commit
+        old_sha=$(cat "${SHA_FILE}")
+        git reset --hard "${old_sha}"
+    fi
 
     # Optionally, clean up any leftover patch file if applicable
     rm -f "${SHA_FILE}"
 
-    echo "Git split aborted. HEAD restored to the state before 'git split start'."
+    echo "Git split aborted."
+    if [ "$2" != "--keep" ]; then
+        echo "HEAD restored to the state before 'git split start'."
+    else
+        echo "Current HEAD was kept."
+    fi
 else
     if [ -f "${SHA_FILE}" ] && [ $# -eq 0 ]; then
         echo "Currently in split with starting point: $(cat ${SHA_FILE})"
     else
-        echo "Usage: git split {start|diff|end|abort}"
+        echo "Usage: git split {start [--hard]|end|abort [--keep]|diff}"
         exit 1
     fi
 fi
